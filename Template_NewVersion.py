@@ -6,10 +6,12 @@ def inputfromfile(file_path):
 	4. Side Effect: 
 	'''
 	global headers
+	global mydata
+	mydata = []
 
 	with open(file_path) as file:
 		for line in file:
-			self.mydata.append(line.split("|"))
+			mydata.append(line.strip(" \n+").split("|"))
 	
 	headers = dict(zip(mydata[0], range(len(mydata[0]))))
 	
