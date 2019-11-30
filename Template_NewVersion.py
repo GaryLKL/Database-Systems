@@ -1,23 +1,32 @@
-def inputfromfile(self, file_path):
+def inputfromfile(file_path):
 	'''
 	1. Function: to read the data into "mydata" line by line
 	2. Inputs: the path of the text file whose delimiter is "|" and headers are in the first line
 	3. Outputs: a n*m array data
 	4. Side Effect: 
 	'''
+	global headers
+
 	with open(file_path) as file:
 		for line in file:
 			self.mydata.append(line.split("|"))
+	
+	headers = dict(zip(mydata[0], range(len(mydata[0]))))
 	
 	return mydata[1:]
 
 def select(table, statemt):
 	'''
 	1. Function: to select all columns from the table with restricted rows under the statement
-	2. Inputs: "table" means a 2-dimension array data; "statemt" is the statement you set up on the array
+	2. Inputs: "table" means a 2-dimension array data; "statemt" is the string-type condition statement
 	3. Outputs: a n*m array data
 	4. Side Effect:
 	'''
+
+	if "and" in statemt:
+		conditions = statemt.split("and")
+
+
 
 	return 
 
