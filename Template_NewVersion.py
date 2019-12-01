@@ -85,8 +85,9 @@ def project(table, *args):
 	3. Outputs: a table with selected columns
 	4. Side Effect:
 	'''
+	cols = [col_name for col_name in args]
 
-	return [[table[col_name][line] for col_name in args] for line in range(len(table))]
+	return table[cols]
 
 def avg(table, *args):
 	'''
@@ -103,7 +104,10 @@ def avg(table, *args):
 	except:
 		print("Some of the selected columns could not be conveted to integers.")
 
-	return [np.mean([table[col_name][line] for line in range(len(table))]) for col_name in args]
+	if len(args) == 1:
+		return np.mean([table[args[0]][line] for line in range(len(table))])
+	else:
+		return [np.mean([table[col_name][line] for line in range(len(table))]) for col_name in args]
 
 	#return [np.mean([table[line][headers.get(col_name)] for line in range(len(table))]) for col_name in args]
 
@@ -121,8 +125,11 @@ def sum(table, *args):
 
 	except:
 		print("Some of the selected columns could not be conveted to integers.")
-		
-	return [np.sum([table[col_name][line] for line in range(len(table))]) for col_name in args]
+	
+	if len(args) == 1:
+		return np.sum([table[args[0]][line] for line in range(len(table))])
+	else:
+		return [np.sum([table[col_name][line] for line in range(len(table))]) for col_name in args]
 
 def count(table, *args):
 	'''
@@ -132,30 +139,105 @@ def count(table, *args):
 	4. Side Effect:
 	'''
 
-	if args == "*":
-		return len(table)
+	if len(args) == 1:
+		if args[0] == "*":
+			return len(table)
+		else:
+			return len([table[args[0]][line] for line in range(len(table))])
 	else:
 		return [len([table[col_name][line] for line in range(len(table))]) for col_name in args]
 
-def countgroup():
+def countgroup(table, countcol, *args):
 	'''
 	1. Function:  
 	2. Inputs: 
 	3. Outputs:
 	4. Side Effect:
 	'''
+	try:
+		# string to int
+		mytype = [(name, int) if name == countcol else (name, tp[0]) for name, tp in table.dtype.fields.items()]
+		table = np.array(table, dtype = mytype)
+	except:
+		print("The selected columns could not be conveted to integers.")
 
-	return 
+	# find groups for all columns
+	group_set = []
+	for col_name in args:
+		group_set.append(list(set(table[col_name])))
 	
-def sumgroup():
+
+	# all combinations for columns' group
+	if len(args) == 1:
+		combinations = group_set[0]
+	else:
+		combinations = list(product(*group_set))
+	# initializing
+	group_table = [] # used to save the new table with the avg and other group columns
+	for comb in combinations:
+
+		temp_ind = []
+		for line in range(len(table)):
+			true_false_list = []
+			for i in range(len(args)):
+				if table[args[i]][line] == comb[i]:
+					true_false_list.append(1) # to see if this line matches all the value in comb
+			if np.sum(true_false_list) == len(args):
+				temp_ind.append(line) # if every value matches, append the line index into a list
+
+		# count summation
+		total_number = len([table[countcol][i] for i in temp_ind])
+		if len(args) == 1 and total_number != 0:
+			group_table.append(tuple([total_number] + [comb])) # can't use list because list('123') -> ['1', '2', '3']
+		elif len(args) > 1 and total_number != 0:
+			group_table.append(tuple([total_number] + list(comb)))
+	return group_table
+	
+def sumgroup(table, sumcol, *args):
 	'''
 	1. Function: 
 	2. Inputs: 
 	3. Outputs:
 	4. Side Effect:
 	'''
+	try:
+		# string to int
+		mytype = [(name, int) if name == sumcol else (name, tp[0]) for name, tp in table.dtype.fields.items()]
+		table = np.array(table, dtype = mytype)
+	except:
+		print("The selected columns could not be conveted to integers.")
 
-	return
+	# find groups for all columns
+	group_set = []
+	for col_name in args:
+		group_set.append(list(set(table[col_name])))
+	
+
+	# all combinations for columns' group
+	if len(args) == 1:
+		combinations = group_set[0]
+	else:
+		combinations = list(product(*group_set))
+	# initializing
+	group_table = [] # used to save the new table with the avg and other group columns
+	for comb in combinations:
+
+		temp_ind = []
+		for line in range(len(table)):
+			true_false_list = []
+			for i in range(len(args)):
+				if table[args[i]][line] == comb[i]:
+					true_false_list.append(1) # to see if this line matches all the value in comb
+			if np.sum(true_false_list) == len(args):
+				temp_ind.append(line) # if every value matches, append the line index into a list
+
+		# count summation
+		summation = np.sum([table[sumcol][i] for i in temp_ind])
+		if len(args) == 1 and summation != 0:
+			group_table.append(tuple([summation] + [comb])) # can't use list because list('123') -> ['1', '2', '3']
+		elif len(args) > 1 and summation != 0:
+			group_table.append(tuple([summation] + list(comb)))
+	return group_table
 
 
 def avggroup(table, avgcol, *args):
@@ -166,26 +248,55 @@ def avggroup(table, avgcol, *args):
 	4. Side Effect:
 	'''
 	try:
-		col_index = headers.get(avgcol)
-		for i in range(len(table)):
-			table[i][col_index] = int(table[i][col_index])
+		# string to int
+		mytype = [(name, int) if name == avgcol else (name, tp[0]) for name, tp in table.dtype.fields.items()]
+		table = np.array(table, dtype = mytype)
 	except:
-		print("Some of the selected columns could not be conveted to integers.")
+		print("The selected columns could not be conveted to integers.")
 
 	# find groups for all columns
-	group_set = [] 
+	group_set = []
 	for col_name in args:
-		group_set.append(set([table[line][headers.get(col_name)] for line in table]))
+		group_set.append(list(set(table[col_name])))
+	
+	'''
+	# How many combinations?
+	total_combination_length = 1
+	for i in group_set:
+		total_combination_length = total_combination_length * len(i)
+	# get all combinations
+	#all_combination = [[] * total_combination_length]
+	all_combination = []
+	for i in range(len(args)):
+		for j in group_set:
+			group_length = len(j)
+	'''
 
 	# all combinations for columns' group
-	combinations = list(product(group_set))
-
+	if len(args) == 1:
+		combinations = group_set[0]
+	else:
+		combinations = list(product(*group_set))
 	# initializing
-	new_col_length = len(args) + 1
-	group_table = [[]*(new_col_length)] # used to save the new table with the avg and other group columns
+	group_table = [] # used to save the new table with the avg and other group columns
+	for comb in combinations:
 
-	#[table[line][headers.get(avgcol)] for line in range(len(table)) if ]
+		temp_ind = []
+		for line in range(len(table)):
+			true_false_list = []
+			for i in range(len(args)):
+				if table[args[i]][line] == comb[i]:
+					true_false_list.append(1) # to see if this line matches all the value in comb
+			if np.sum(true_false_list) == len(args):
+				temp_ind.append(line) # if every value matches, append the line index into a list
 
+		# count average
+		avg = np.mean([table[avgcol][i] for i in temp_ind])
+		if len(args) == 1 and not np.isnan(avg):
+			group_table.append(tuple([avg] + [comb])) # can't use list because list('123') -> ['1', '2', '3']
+		elif len(args) > 1 and not np.isnan(avg):
+			group_table.append(tuple([avg] + list(comb)))
+	return group_table
 
 def join(tb1, tb2, by_condition):
 	'''
