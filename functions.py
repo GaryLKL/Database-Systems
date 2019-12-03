@@ -1,7 +1,7 @@
 import numpy as np
 import re
 from itertools import product
-# The following packages are for BTree
+# The following packages are used for BTree
 import ZODB 
 from BTrees.OOBTree import BTree
 
@@ -10,8 +10,8 @@ def inputfromfile(file_path):
 	'''
 	1. Function: to read the data line by line 
 	2. Inputs: the path of the text file whose delimiter is "|" and headers are in the first line
-	3. Outputs: a n*m array data; n is the number of lines; m is the number of columns
-	4. Side Effect: 
+	3. Outputs: a array data with string-type columns;
+	4. Side Effect: the function will create a global array data and also return the array
 	'''
 	global mydata
 	mydata = []
@@ -36,10 +36,10 @@ def inputfromfile(file_path):
 
 def select(table, statemt):
 	'''
-	1. Function: to select all columns from the table with restricted rows under the statement
+	1. Function: to select all columns from the table with the conditional rows under the statement
 	2. Inputs: "table" means a 2-dimension array data; "statemt" is the string-type condition statement
-	3. Outputs: a n*m array data
-	4. Side Effect:
+	3. Outputs: a string-type array data with the conditional rows
+	4. Side Effect: if the column is an index, the function will automatically use the btree or hash attribute
 	'''
 
 
@@ -237,7 +237,7 @@ def count(table, col_name):
 
 def countgroup(table, countcol, *args):
 	'''
-	1. Function:  
+	1. Function: 
 	2. Inputs: 
 	3. Outputs:
 	4. Side Effect:
