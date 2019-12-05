@@ -1,0 +1,2 @@
+R := inputfromfile(shorttest.txt)
+R1 := select(R, (time > 50) or (qty < 30))

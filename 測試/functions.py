@@ -53,16 +53,13 @@ def select(table, statemt):
 			arithop = None
 			pass
 
-		if re.findall("!=|<=|>=", condition) == []:
-			delim = re.findall("=|<|>", condition)[0] # e.g. ">"
-		else:
-			delim = re.findall("!=|<=|>=", condition)[0]
+		delim = re.findall("=|<|>|!=|<=|>=", condition)[0] # e.g. ">"
 
 
 		# How to automatically know if the column is on the left side or right side?
 		# By transform the left side to a float type, if it doesn't work, that's a column name.
 		
-		leftside = condition.split(delim)[0].strip(" +") # "time + 5 > 50" -> "time + 5"
+		leftside =  condition.split(delim)[0].strip(" +") # "time + 5 > 50" -> "time + 5"
 		if arithop:
 			try:
 				value_left = float(leftside) # "50 < time + 5"
@@ -80,14 +77,14 @@ def select(table, statemt):
 				arithop_value = leftside.split(arithop)[1].strip(" +") # 5
 
 			# Math
-			if arithop == "+":
-				number = str(float(number) - float(arithop_value)) # str(50 - 5)
-			elif arithop == "-":
-				number = str(float(number) + float(arithop_value)) # str(50 + 5)
-			elif arithop == "*":
-				number = str(float(number) / float(arithop_value)) # str(50 / 5)
-			elif arithop == "/":
-				number = str(float(number) * float(arithop_value)) # str(50 * 5)
+				if arithop == "+":
+					number = str(float(number) - float(arithop_value)) # str(50 - 5)
+				elif arithop == "-":
+					number = str(float(number) + float(arithop_value)) # str(50 + 5)
+				elif arithop == "*":
+					number = str(float(number) / float(arithop_value)) # str(50 / 5)
+				elif arithop == "/":
+					number = str(float(number) * float(arithop_value)) # str(50 * 5)
 		else:
 			try:
 				value_left = float(leftside) # "50 < time"
@@ -147,13 +144,8 @@ def select(table, statemt):
 					except:
 						pass
 					remain_index = "[i for i, v in enumerate(np.array(target_col) " + delim_number + ") if v == True]"
-				else:
-					# string to float
-					try:
-						target_col = eval("[float(ele) for ele in table[column_name]]")
-					except:
-						pass
-					# conditions two: "'50' <"
+					
+				else: # conditions two: "'50' <"
 					remain_index = "[i for i, v in enumerate(" + delim_number + " np.array(target_col)) if v == True]"
 					
 				return eval(remain_index) # the index of the true condition
@@ -413,12 +405,8 @@ def join(tb1, tb2, by_condition):
 	def get_index(condition, tb1, tb2):
 		condition = condition.strip("(\(|\)| )+") # e.g. (R1.qty > S.Q) -> R1.qty > S.Q
 
-		# get the comparison symbol		
-		if re.findall("!=|<=|>=", condition) == []:
-			mydelimiter = re.findall("=|<|>", condition)[0] # e.g. ">"
-		else:
-			mydelimiter = re.findall("!=|<=|>=", condition)[0]
-
+		mydelimiter = re.findall('=|<|>|!=|<=|>=', condition)[0] # ">"
+		
 		# Is there an arithop? e.g. (R.qty + 5 = S.time * 2)
 		try:
 			arithop_left = re.findall("\+|\-|\*|\/", condition.split(mydelimiter)[0])[0] # "+"
@@ -434,16 +422,16 @@ def join(tb1, tb2, by_condition):
 		# How to automatically know if the column is on the left side or right side?
 		# By transform the left side to a float type, if it doesn't work, that's a column name.
 		if arithop_left: # R.qty + 5
-			tb1_col = re.split(mydelimiter, condition)[0].split(arithop_left)[0].strip(" +").split(".")[1]
-			tb1_number = re.split(mydelimiter, condition)[0].split(arithop_left)[1].strip(" +")
+			tb1_col = re.split("=|<|>|!=|<=|>=", condition)[0].split(arithop_left)[0].strip(" +").split(".")[1]
+			tb1_number = re.split("=|<|>|!=|<=|>=", condition)[0].split(arithop_left)[1].strip(" +")
 		else:
-			tb1_col = re.split(mydelimiter, condition)[0].strip(" +").split(".")[1] # "qty"
+			tb1_col = re.split("=|<|>|!=|<=|>=", condition)[0].strip(" +").split(".")[1] # "qty"
 		
 		if arithop_right:
-			tb2_col = re.split(mydelimiter, condition)[1].split(arithop_right)[0].strip(" +").split(".")[1]
-			tb2_numbert = re.split(mydelimiter, condition)[1].split(arithop_right)[1].strip(" +")
+			tb2_col = re.split("=|<|>|!=|<=|>=", condition)[1].split(arithop_right)[0].strip(" +").split(".")[1]
+			tb2_numbert = re.split("=|<|>|!=|<=|>=", condition)[1].split(arithop_right)[1].strip(" +")
 		else:
-			tb2_col = re.split(mydelimiter, condition)[1].strip(" +").split(".")[1] # "Q"
+			tb2_col = re.split("=|<|>|!=|<=|>=", condition)[1].strip(" +").split(".")[1] # "Q"
 
 
 		'''
@@ -604,6 +592,7 @@ def join(tb1, tb2, by_condition):
 				for n in tb1_match_ind:
 					index_dict[n] = [ind for ind, val in enumerate(tb2[tb2_col]) if val in list(key_dict[m])]
 		
+
 		return index_dict
 
 
@@ -616,14 +605,8 @@ def join(tb1, tb2, by_condition):
 		# get the two tables name
 		condition_for_table_name = conditions[0].strip("(\(|\)| )+")
 
-		# get the comparison symbol		
-		if re.findall("!=|<=|>=", condition_for_table_name) == []:
-			mydelimiter = re.findall("=|<|>", condition_for_table_name)[0] # e.g. ">"
-		else:
-			mydelimiter = re.findall("!=|<=|>=", condition_for_table_name)[0]
-
-		table_one_name = re.split(mydelimiter, condition_for_table_name)[0].strip(" +").split(".")[0]
-		table_two_name = re.split(mydelimiter, condition_for_table_name)[1].strip(" +").split(".")[0]
+		table_one_name = re.split("=|<|>|!=|<=|>=", condition_for_table_name)[0].strip(" +").split(".")[0]
+		table_two_name = re.split("=|<|>|!=|<=|>=", condition_for_table_name)[1].strip(" +").split(".")[0]
 
 		# start
 		for con in conditions:
@@ -632,12 +615,10 @@ def join(tb1, tb2, by_condition):
 		new_dict = {}
 		for line in range(len(tb1)):
 			intersect = []
-			try:
-				for con_ind in range(len(conditions)):
-					intersect.append(dict_list[con_ind][line])
-				new_dict[line] = list(set(intersect[0]).intersection(*intersect))
-			except:
-				pass
+			for con_ind in range(len(conditions)):
+				intersect.append(dict_list[con_ind][line])
+			new_dict[line] = list(set(intersect[0]).intersection(*intersect))
+		
 		for ind_1, ind_2 in new_dict.items():
 			if len(ind_2) > 0:
 				for each_ind_2 in ind_2:
@@ -651,14 +632,8 @@ def join(tb1, tb2, by_condition):
 		# get the two tables name
 		condition_for_table_name = conditions[0].strip("(\(|\)| )+")
 
-		# get the comparison symbol		
-		if re.findall("!=|<=|>=", condition_for_table_name) == []:
-			mydelimiter = re.findall("=|<|>", condition_for_table_name)[0] # e.g. ">"
-		else:
-			mydelimiter = re.findall("!=|<=|>=", condition_for_table_name)[0]
-
-		table_one_name = re.split(mydelimiter, condition_for_table_name)[0].strip(" +").split(".")[0]
-		table_two_name = re.split(mydelimiter, condition_for_table_name)[1].strip(" +").split(".")[0]
+		table_one_name = re.split("=|<|>|!=|<=|>=", condition_for_table_name)[0].strip(" +").split(".")[0]
+		table_two_name = re.split("=|<|>|!=|<=|>=", condition_for_table_name)[1].strip(" +").split(".")[0]
 
 		# start
 		for con in conditions:
@@ -667,12 +642,10 @@ def join(tb1, tb2, by_condition):
 		new_dict = {}
 		for line in range(len(tb1)):
 			Union = []
-			try:
-				for con_ind in range(len(conditions)):
-					Union.append(dict_list[con_ind][line])
-				new_dict[line] = list(set().union(*Union))
-			except:
-				pass
+			for con_ind in range(len(conditions)):
+				Union.append(dict_list[con_ind][line])
+			new_dict[line] = list(set().union(*Union))
+		
 		for ind_1, ind_2 in new_dict.items():
 			if len(ind_2) > 0:
 				for each_ind_2 in ind_2:
@@ -681,18 +654,12 @@ def join(tb1, tb2, by_condition):
 	else:
 		# get the two tables name
 		condition_for_table_name = by_condition.strip("(\(|\)| )+")
-
-		# get the comparison symbol		
-		if re.findall("!=|<=|>=", condition_for_table_name) == []:
-			mydelimiter = re.findall("=|<|>", condition_for_table_name)[0] # e.g. ">"
-		else:
-			mydelimiter = re.findall("!=|<=|>=", condition_for_table_name)[0]
-
-		table_one_name = re.split(mydelimiter, condition_for_table_name)[0].strip(" +").split(".")[0]
-		table_two_name = re.split(mydelimiter, condition_for_table_name)[1].strip(" +").split(".")[0]
+		table_one_name = re.split("=|<|>|!=|<=|>=", condition_for_table_name)[0].strip(" +").split(".")[0]
+		table_two_name = re.split("=|<|>|!=|<=|>=", condition_for_table_name)[1].strip(" +").split(".")[0]
 
 		# start
 		index_table = get_index(by_condition, tb1, tb2)
+		print(index_table)
 		for ind_1, ind_2 in index_table.items():
 			if len(ind_2) > 0:
 				for each_ind_2 in ind_2:
@@ -760,7 +727,7 @@ def movavg(table, col_name, n_item):
 	'''
 
 	if len(table) < n_item:
-		print("The number of rows is " + str(len(table)) + ". Please choose a smaller value of n_item.")
+		print("The number of rows is " + len(table) + ". Please choose a smaller value of n_item.")
 	else:
 		pass
 
@@ -794,7 +761,7 @@ def movsum(table, col_name, n_item):
 	'''
 	
 	if len(table) < n_item:
-		print("The number of rows is " + str(len(table)) + ". Please choose a smaller value of n_item.")
+		print("The number of rows is " + len(table) + ". Please choose a smaller value of n_item.")
 	else:
 		pass
 
@@ -829,15 +796,15 @@ def concat(tb1, tb2):
 
 	return np.append(tb1, tb2)
 
-def outputtofile(table, outputfile):
+def outputtofile(table, file):
 	'''
 	1. Function: 
 	2. Inputs: 
 	3. Outputs:
 	4. Side Effect:
 	'''
-	outputtable = [list(table.dtype.names)] + [list(line) for line in table]
-	np.savetxt(outputfile, outputtable, fmt='%s', delimiter = "|")
+
+	np.savetxt(file, table, delimiter = "|")
 
 def Btree(table, index_col):
 	'''
