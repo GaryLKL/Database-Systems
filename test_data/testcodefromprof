@@ -1,0 +1,85 @@
+np.savetxt("Finish/test/myR.txt", R, fmt="%s", delimiter="\t")
+
+data = []
+with open("test/R2.TXT") as f:
+	for line in f:
+		data.append(line.strip('\n| ').split("\t"))
+
+
+data = []
+with open("test/R3.TXT") as f:
+	for line in f:
+		data.append(line.strip('\n| ').split("\t"))
+
+*****
+data = []
+with open("test/R4.TXT") as f:
+	for line in f:
+		data.append(line.strip('\n| ').split("\t"))
+
+data = []
+with open("test/R5.TXT") as f:
+	for line in f:
+		data.append(line.strip('\n| ').split("\t"))
+
+data = []
+with open("test/R6.TXT") as f:
+	for line in f:
+		data.append(line.strip('\n| ').split("\t"))
+
+
+data = []
+with open("test/T.TXT") as f:
+	for line in f:
+		data.append(line.strip('\n| ').split("\t"))
+
+data = []
+with open("test/T1.TXT") as f:
+	for line in f:
+		data.append(line.strip('\n| ').split("\t"))
+
+data = []
+with open("test/T2.TXT") as f:
+	for line in f:
+		data.append(line.strip('\n| ').split("\t"))
+
+data = []
+with open("test/T2prime.TXT") as f:
+	for line in f:
+		data.append(line.strip('\n| ').split("\t"))
+
+data = []
+with open("test/T3.TXT") as f:
+	for line in f:
+		data.append(line.strip('\n| ').split("\t"))
+
+data = []
+with open("test/T4.TXT") as f:
+	for line in f:
+		data.append(line.strip('\n| ').split("\t"))
+
+
+data = []
+with open("test/Q1.TXT") as f:
+	for line in f:
+		data.append(line.strip('\n| ').split("\t"))
+
+data = []
+with open("test/Q2.TXT") as f:
+	for line in f:
+		data.append(line.strip('\n| ').split("\t"))
+
+data = []
+with open("test/Q3.TXT") as f:
+	for line in f:
+		data.append(line.strip('\n| ').split("\t"))
+
+data = []
+with open("test/Q4.TXT") as f:
+	for line in f:
+		data.append(line.strip('\n| ').split("\t"))
+
+data = []
+with open("test/Q5.TXT") as f:
+	for line in f:
+		data.append(line.strip('\n| ').split("\t"))

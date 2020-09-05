@@ -1,0 +1,16 @@
+Processing time for "R := inputfromfile(sales1.txt)" is: 0.002 sec.
+
+Processing time for "R1 := select(R, (time > 50) or (qty < 30))" is: 0.003 sec.
+
+Processing time for "R2 := project(R1, saleid, qty, pricerange)" is: 0.0 sec.
+
+Processing time for "R3 := avg(R1, qty)" is: 0.001 sec.
+
+Processing time for "R4 := sumgroup(R1, time, qty)" is: 0.245 sec.
+
+Processing time for "R5 := sumgroup(R1, qty, time, pricerange) " is: 2.281 sec.
+
+Processing time for "R6 := avggroup(R1, qty, pricerange)" is: 0.026 sec.
+
+Processing time for "S := inputfromfile(sales2.txt)" is: 0.182 sec.
+

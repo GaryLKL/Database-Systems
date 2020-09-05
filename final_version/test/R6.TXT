@@ -1,0 +1,5 @@
+20.5469	cheap
+24.9545	expensive
+22.3846	moderate
+23.7170	outrageous
+26.1013	supercheap 

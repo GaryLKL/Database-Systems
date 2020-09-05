@@ -13,8 +13,18 @@ def inputfromfile(file_path):
 	3. Outputs: a array data with string-type columns;
 	4. Side Effect: the function will create a global array data and also return the array
 	'''
+
+	if file_path == "":
+		return "Please enter a correct file path."
+
 	global mydata
 	mydata = []
+
+	# Does file name contain .txt?
+	if ".txt" in file_path:
+		pass
+	else:
+		file_path = file_path + ".txt"
 
 	with open(file_path) as file:
 		for line in file:
@@ -42,6 +52,8 @@ def select(table, statemt):
 	4. Side Effect: if the column is an index, the function will automatically use the btree or hash attribute
 	'''
 
+	if table.tolist() == []:
+		return "Fail! The table is empty."
 
 	def get_remain_index(condition, table):
 		condition = condition.strip("(\(|\)| )+") # e.g. "(time + 5 > 50)" -> time > 50 / "(50 < time + 5)"
@@ -196,6 +208,10 @@ def project(table, *args):
 	3. Outputs: a table with selected columns
 	4. Side Effect:
 	'''
+
+	if table.tolist() == []:
+		return "Fail! The table is empty."
+
 	cols = [col_name for col_name in args]
 
 	
@@ -209,6 +225,10 @@ def avg(table, col_name):
 	3. Outputs:
 	4. Side Effect:
 	'''
+
+	if table.tolist() == []:
+		return "Fail! The table is empty."
+
 	try:
 		# string to float
 		mytype = [(name, float) if name == col_name else (name, tp[0]) for name, tp in table.dtype.fields.items()]
@@ -231,6 +251,10 @@ def sum(table, col_name):
 	3. Outputs:
 	4. Side Effect:
 	'''
+
+	if table.tolist() == []:
+		return "Fail! The table is empty."
+
 	try:
 		# string to float
 		mytype = [(name, float) if name == col_name else (name, tp[0]) for name, tp in table.dtype.fields.items()]
@@ -253,6 +277,9 @@ def count(table):
 	4. Side Effect:
 	'''
 
+	if table.tolist() == []:
+		return "Fail! The table is empty."
+
 	return len(table)
 
 def countgroup(table, countcol, *args):
@@ -262,6 +289,9 @@ def countgroup(table, countcol, *args):
 	3. Outputs:
 	4. Side Effect:
 	'''
+
+	if table.tolist() == []:
+		return "Fail! The table is empty."
 
 	# find groups for all columns
 	group_set = []
@@ -307,6 +337,10 @@ def sumgroup(table, sumcol, *args):
 	3. Outputs:
 	4. Side Effect:
 	'''
+
+	if table.tolist() == []:
+		return "Fail! The table is empty."
+
 	try:
 		# string to float
 		mytype = [(name, float) if name == sumcol else (name, tp[0]) for name, tp in table.dtype.fields.items()]
@@ -357,6 +391,10 @@ def avggroup(table, avgcol, *args):
 	3. Outputs:
 	4. Side Effect:
 	'''
+
+	if table.tolist() == []:
+		return "Fail! The table is empty."
+
 	try:
 		# string to float
 		mytype = [(name, float) if name == avgcol else (name, tp[0]) for name, tp in table.dtype.fields.items()]
@@ -410,6 +448,10 @@ def join(tb1, tb2, by_condition):
 	3. Outputs:
 	4. Side Effect:
 	'''
+
+	if tb1.tolist() == [] or tb1.tolist() == []:
+		return "Fail! One of the table is empty."
+
 	def get_index(condition, tb1, tb2):
 		condition = condition.strip("(\(|\)| )+") # e.g. (R1.qty > S.Q) -> R1.qty > S.Q
 
@@ -718,6 +760,9 @@ def sort(table, *args):
 	4. Side Effect:
 	'''
 
+	if table.tolist() == []:
+		return "Fail! The table is empty."
+
 	# create a new table 
 	new_table = table.copy()
 	table_type = table.dtype
@@ -759,6 +804,9 @@ def movavg(table, col_name, n_item):
 	4. Side Effect:
 	'''
 
+	if table.tolist() == []:
+		return "Fail! The table is empty."
+
 	if len(table) < n_item:
 		print("The number of rows is " + str(len(table)) + ". Please choose a smaller value of n_item.")
 	else:
@@ -792,7 +840,9 @@ def movsum(table, col_name, n_item):
 	3. Outputs:
 	4. Side Effect:
 	'''
-	
+	if table.tolist() == []:
+		return "Fail! The table is empty."
+
 	if len(table) < n_item:
 		print("The number of rows is " + str(len(table)) + ". Please choose a smaller value of n_item.")
 	else:
@@ -827,6 +877,9 @@ def concat(tb1, tb2):
 	4. Side Effect:
 	'''
 
+	if tb1.tolist() == [] or tb2.tolist() == []:
+		return "Fail! One of the table is empty."
+
 	return np.append(tb1, tb2)
 
 def outputtofile(table, outputfile):
@@ -836,8 +889,15 @@ def outputtofile(table, outputfile):
 	3. Outputs:
 	4. Side Effect:
 	'''
-	outputtable = [list(table.dtype.names)] + [list(line) for line in table]
-	np.savetxt(outputfile, outputtable, fmt='%s', delimiter = "|")
+
+	if table.tolist() == []:
+		print("Fail! The table is empty.")
+
+	try:
+		outputtable = [list(table.dtype.names)] + [list(line) for line in table]
+		np.savetxt(outputfile, outputtable, fmt='%s', delimiter = "|")
+	except:
+		print("Fail!")
 
 def Btree(table, index_col):
 	'''
@@ -846,6 +906,9 @@ def Btree(table, index_col):
 	3. Outputs:
 	4. Side Effect:
 	'''
+
+	if table.tolist() == []:
+		return "Fail! The table is empty."
 
 	globals()[index_col+"_index"] = BTree() # mydata_pricerange_btree = BTree() 
 	
@@ -865,6 +928,9 @@ def Hash(table, index_col):
 	3. Outputs:
 	4. Side Effect:
 	'''
+
+	if table.tolist() == []:
+		return "Fail! The table is empty."
 
 	globals()[index_col+"_index"] = {}
 	

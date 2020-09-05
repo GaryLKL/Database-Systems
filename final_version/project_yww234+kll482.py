@@ -1,0 +1,1088 @@
+import numpy as np
+import re
+from itertools import product
+import time
+import sys
+# The following packages are used for BTree
+import ZODB 
+from BTrees.OOBTree import BTree
+
+
+def inputfromfile(file_path):
+	'''
+	1. Function: to read the data line by line 
+	2. Inputs: the path of the text file whose delimiter is "|" and headers are in the first line
+	3. Outputs: a array data with string-type columns;
+	4. Side Effect: the function will create a global array data and also return the array
+	'''
+
+	if file_path == "":
+		return "Please enter a correct file path."
+
+	global mydata
+	mydata = []
+
+	# Does file name contain .txt?
+	if ".txt" in file_path:
+		pass
+	else:
+		file_path = file_path + ".txt"
+
+	with open(file_path) as file:
+		for line in file:
+			mydata.append(tuple(line.strip(" \n+").split("|")))
+	
+	#headers = dict(zip(mydata[0], range(len(mydata[0]))))
+	
+	# data types
+	names = mydata[0]
+	#formats = ["<U10"] * len(names)
+	#datatype = list(zip(names, formats))
+	#datatype = np.dtype({'names': names, 'formats': formats})
+	datatype = [(col_name, "<U10") for col_name in names]
+	#mytype = list(zip(list(headers.keys()), ["<U10"] * len(headers.keys())))
+	mydata = np.array(mydata[1:], dtype = datatype)
+	
+	return mydata
+
+
+def select(table, statemt):
+	'''
+	1. Function: to select all columns from the table with the conditional rows under the statement
+	2. Inputs: "table" means a 2-dimension array data; "statemt" is the string-type condition statement
+	3. Outputs: a string-type array data with the conditional rows
+	4. Side Effect: if the column is an index, the function will automatically use the btree or hash attribute
+	'''
+
+	if table.tolist() == []:
+		return "Fail! The table is empty."
+
+	def get_remain_index(condition, table):
+		condition = condition.strip("(\(|\)| )+") # e.g. "(time + 5 > 50)" -> time > 50 / "(50 < time + 5)"
+
+		# Is there an arithop?
+		try:
+			arithop = re.findall("\+|\-|\*|\/", condition)[0]
+		except:
+			arithop = None
+			pass
+
+		if re.findall("!=|<=|>=", condition) == []:
+			delim = re.findall("=|<|>", condition)[0] # e.g. ">"
+		else:
+			delim = re.findall("!=|<=|>=", condition)[0]
+
+
+		# How to automatically know if the column is on the left side or right side?
+		# By transform the left side to a float type, if it doesn't work, that's a column name.
+		
+		leftside = condition.split(delim)[0].strip(" +") # "time + 5 > 50" -> "time + 5"
+		if arithop:
+			try:
+				value_left = float(leftside) # "50 < time + 5"
+				# The left side is a float-type value. Then, the right side has the column
+				rightside = condition.split(delim)[1].strip(" +") # "time + 5"
+				column_name = rightside.split(arithop)[0].strip(" +") # "time"
+				number = leftside # 50
+				arithop_value = rightside.split(arithop)[1].strip(" +") # 5
+
+			except:
+				value_left = None # "time + 5 > 50"
+				# Then, the left side has the column
+				column_name = leftside.split(arithop)[0].strip(" +") # time
+				number = condition.split(delim)[1].strip(" +") # 50
+				arithop_value = leftside.split(arithop)[1].strip(" +") # 5
+
+			# Math
+			if arithop == "+":
+				number = str(float(number) - float(arithop_value)) # str(50 - 5)
+			elif arithop == "-":
+				number = str(float(number) + float(arithop_value)) # str(50 + 5)
+			elif arithop == "*":
+				number = str(float(number) / float(arithop_value)) # str(50 / 5)
+			elif arithop == "/":
+				number = str(float(number) * float(arithop_value)) # str(50 * 5)
+		else:
+			try:
+				value_left = float(leftside) # "50 < time"
+				column_name = condition.split(delim)[1].strip(" +") # e.g. "time"
+				number = leftside
+			except:
+				value_left = None # "time > 50"
+				column_name = leftside
+				number = condition.split(delim)[1].strip(" +")
+		
+		# In the following, I don't need to do split anymore, so I will transform "=" to "==" for the comparison problem
+		if delim == "=":
+			new_delim = "==" 
+		else:
+			new_delim = delim
+
+		if value_left is None:
+			delim_number = new_delim + " " + number # conditions one: "> '50'"
+		else:
+			delim_number = "" + number + " " + new_delim # conditions two: "'50' <"
+
+		# Change the type of the column from string to float
+		'''
+		try:
+			# string to int
+			mytype = [(name, int) if name == column_name else (name, tp[0]) for name, tp in table.dtype.fields.items()]
+			table = np.array(table, dtype = mytype)
+
+		except:
+			pass # stay string
+		'''
+
+		# Check if the column is an index of btree
+		try:
+			# The column is an index
+			if column_name+"_index" in globals():
+				print("You are using a Btree or Hash format index.")
+				remain_index = []
+				unique_keys = eval("list("+column_name+"_index.keys())")
+
+				# Handle "> 50" or "50 <"
+				if value_left is None: # conditions one: "> 50"
+					keys_under_condition = eval("[i for i in unique_keys if float(i)"+delim_number+"]")
+				else: # conditions two: "50 <"
+					keys_under_condition = eval("[i for i in unique_keys if " + delim_number + " float(i)]")
+				
+				for i in keys_under_condition:
+					remain_index = remain_index + eval(column_name+"_index.get(i)")
+				return remain_index
+			
+			# The column is not an index
+			else:
+				if value_left is None: # conditions one: "> 50"
+					# string to float
+					try:
+						target_col = eval("[float(ele) for ele in table[column_name]]")
+					except:
+						pass
+					remain_index = "[i for i, v in enumerate(np.array(target_col) " + delim_number + ") if v == True]"
+				else:
+					# string to float
+					try:
+						target_col = eval("[float(ele) for ele in table[column_name]]")
+					except:
+						pass
+					# conditions two: "'50' <"
+					remain_index = "[i for i, v in enumerate(" + delim_number + " np.array(target_col)) if v == True]"
+					
+				return eval(remain_index) # the index of the true condition
+		except:
+			print("Some errors may happen in your btree or hash format, or the comparison.")
+
+
+	table_type = table.dtype
+	if " and " in statemt or ")and " in statemt or " and(" in statemt or ")and(" in statemt:
+		delim = re.findall(" and |\)and | and\(|\)and\(", statemt)[0]
+		conditions = statemt.split(delim)
+
+		for con in conditions:
+			table = np.array([table[i] for i in get_remain_index(con, table)], dtype = table_type)
+
+	elif " or " in statemt or ")or " in statemt or " or(" in statemt or ")or(" in statemt:
+		remain_index_or_condition = []
+		delim = re.findall(" or |\)or | or\(|\)or\(", statemt)[0]
+		conditions = statemt.split(delim)
+		for con in conditions:
+			remain_index_or_condition = remain_index_or_condition + get_remain_index(con, table) # e.g. [] + [1,2] + [2,3,4] -> [1,2,2,3,4]
+
+		final_or_index = set(remain_index_or_condition) # e.g. [1,2,2,3,4] -> [1,2,3,4]
+
+		table = np.array([table[i] for i in final_or_index], dtype = table_type)
+
+	else:
+		# only one condition
+		table = np.array([table[i] for i in get_remain_index(statemt, table)], dtype = table_type)
+
+	# give the column name and data type to the array
+
+	return table
+
+
+def project(table, *args):
+	'''
+	1. Function: to select specific columns from the table
+	2. Inputs: "table" means a 2-dimension array data; *args are the selected column names
+	3. Outputs: a table with selected columns
+	4. Side Effect:
+	'''
+
+	if table.tolist() == []:
+		return "Fail! The table is empty."
+
+	cols = [col_name for col_name in args]
+
+	
+	return table[cols]
+
+
+def avg(table, col_name):
+	'''
+	1. Function: compute mean on the column
+	2. Inputs: array; column name
+	3. Outputs: mean of the column
+	4. Side Effect: no
+	'''
+
+	if table.tolist() == []:
+		return "Fail! The table is empty."
+
+	try:
+		# string to float
+		mytype = [(name, float) if name == col_name else (name, tp[0]) for name, tp in table.dtype.fields.items()]
+		table = np.array(table, dtype = mytype)
+
+	except:
+		print("Some of the selected columns could not be conveted to integers.")
+
+	#cols = [col_name for col_name in args]
+	#col_mean = tuple([np.mean([table[col_name][line] for line in range(len(table))]) for col_name in args])
+	#datatype = [(col, float) for col in cols]
+	#return np.array(col_mean, dtype = datatype)
+	return str(np.mean(np.array([table[col_name][line] for line in range(len(table))])))
+
+
+def sum(table, col_name):
+	'''
+	1. Function: compute sum on the column
+	2. Inputs: array; column name
+	3. Outputs: summation of the column
+	4. Side Effect: no
+	'''
+
+	if table.tolist() == []:
+		return "Fail! The table is empty."
+
+	try:
+		# string to float
+		mytype = [(name, float) if name == col_name else (name, tp[0]) for name, tp in table.dtype.fields.items()]
+		table = np.array(table, dtype = mytype)
+
+	except:
+		print("Some of the selected columns could not be conveted to integers.")
+	
+	#cols = [col_name for col_name in args]
+	#col_mean = tuple([np.sum([table[col_name][line] for line in range(len(table))]) for col_name in args])
+	#datatype = [(col, float) for col in cols]
+	#return np.array(col_mean, dtype = datatype)
+	return str(np.sum(np.array([table[col_name][line] for line in range(len(table))])))
+
+def count(table):
+	'''
+	1. Function: count the length of the array
+	2. Inputs: array
+	3. Outputs: a string-type number
+	4. Side Effect: no
+	'''
+
+	if table.tolist() == []:
+		return "Fail! The table is empty."
+
+	return str(len(table))
+
+def countgroup(table, countcol, *args):
+	'''
+	1. Function: count the number of rows in each group
+	2. Inputs: array, the selected column; groupby columns
+	3. Outputs: array data with the original columns and a new column, GroupCount
+	4. Side Effect: no
+	'''
+
+	if table.tolist() == []:
+		return "Fail! The table is empty."
+
+	# find groups for all columns
+	group_set = []
+	for col_name in args:
+		group_set.append(list(set(table[col_name])))
+	
+
+	# all combinations for columns' group
+	if len(args) == 1:
+		combinations = [[i] for i in group_set[0]]
+	else:
+		combinations = list(product(*group_set))
+	# initializing
+	group_table = [] # used to save the new table with the avg and other group columns
+	for comb in combinations:
+
+		temp_ind = []
+		for line in range(len(table)):
+			true_false_list = []
+			for i in range(len(args)):
+				if table[args[i]][line] == comb[i]:
+					true_false_list.append(1) # to see if this line matches all the value in comb
+			if np.sum(true_false_list) == len(args):
+				temp_ind.append(line) # if every value matches, append the line index into a list
+
+		# count length
+		total_number = len([table[countcol][i] for i in temp_ind])
+		if len(args) == 1 and total_number != 0:
+			group_table.append(tuple([total_number] + list(comb))) # can't use list because list('123') -> ['1', '2', '3']
+		elif len(args) > 1 and total_number != 0:
+			group_table.append(tuple([total_number] + list(comb)))
+
+	# column names and data type
+	cols = [col_name for col_name in args]
+	datatype = [("GroupCount", "<U10")] + [(col, "<U10") for col in cols]
+
+	return np.array(group_table, dtype = datatype)
+	
+def sumgroup(table, sumcol, *args):
+	'''
+	1. Function: implement summation of the selected column in each group
+	2. Inputs: array, the selected column; groupby columns
+	3. Outputs: array data with the original columns and a new column, GroupSum
+	4. Side Effect: no
+	'''
+
+	if table.tolist() == []:
+		return "Fail! The table is empty."
+
+	try:
+		# string to float
+		mytype = [(name, float) if name == sumcol else (name, tp[0]) for name, tp in table.dtype.fields.items()]
+		table = np.array(table, dtype = mytype)
+	except:
+		print("The selected columns could not be conveted to float.")
+
+	# find groups for all columns
+	group_set = []
+	for col_name in args:
+		group_set.append(list(set(table[col_name])))
+	
+	# all combinations for columns' group
+	if len(args) == 1:
+		combinations = [[i] for i in group_set[0]]
+	else:
+		combinations = list(product(*group_set))
+	# initializing
+	group_table = [] # used to save the new table with the avg and other group columns
+	for comb in combinations:
+		temp_ind = []
+		for line in range(len(table)):
+			true_false_list = []
+			for i in range(len(args)):
+				if table[args[i]][line] == comb[i]:
+					true_false_list.append(1) # to see if this line matches all the value in comb
+			if np.sum(true_false_list) == len(args):
+				temp_ind.append(line) # if every value matches, append the line index into a list
+		#print(temp_ind)
+		# count summation
+		summation = np.sum(np.array([table[sumcol][i] for i in temp_ind]))
+		if len(args) == 1 and summation != 0:
+			group_table.append(tuple([summation] + list(comb))) # can't use list because list('123') -> ['1', '2', '3']
+		elif len(args) > 1 and summation != 0:
+			group_table.append(tuple([summation] + list(comb)))
+	
+	# column names and data type
+	cols = [col_name for col_name in args]
+	datatype = [("GroupSum", "<U10")] + [(col, "<U10") for col in cols]
+
+	return np.array(group_table, dtype = datatype)
+
+
+def avggroup(table, avgcol, *args):
+	'''
+	1. Function: compute mean of the selected column in each group
+	2. Inputs: array, the selected column; groupby columns
+	3. Outputs: array data with the original columns and a new column, GroupAVG
+	4. Side Effect: no
+	'''
+
+	if table.tolist() == []:
+		return "Fail! The table is empty."
+
+	try:
+		# string to float
+		mytype = [(name, float) if name == avgcol else (name, tp[0]) for name, tp in table.dtype.fields.items()]
+		table = np.array(table, dtype = mytype)
+	except:
+		print("The selected columns could not be conveted to integers.")
+
+	# find groups for all columns
+	group_set = []
+	for col_name in args:
+		group_set.append(list(set(table[col_name])))
+
+	# all combinations for columns' group
+	if len(args) == 1:
+		combinations = combinations = [[i] for i in group_set[0]]
+	else:
+		combinations = list(product(*group_set))
+	# initializing
+	group_table = [] # used to save the new table with the avg and other group columns
+	for comb in combinations:
+
+		temp_ind = []
+		for line in range(len(table)):
+			true_false_list = []
+			for i in range(len(args)):
+				if table[args[i]][line] == comb[i]:
+					true_false_list.append(1) # to see if this line matches all the value in comb
+			if np.sum(true_false_list) == len(args):
+				temp_ind.append(line) # if every value matches, append the line index into a list
+
+		# count average
+		if [table[avgcol][i] for i in temp_ind]:
+			avg = np.mean(np.array([table[avgcol][i] for i in temp_ind]))
+		else:
+			avg = np.nan
+		if len(args) == 1 and not np.isnan(avg):
+			group_table.append(tuple([avg] + list(comb))) # can't use list because list('123') -> ['1', '2', '3']
+		elif len(args) > 1 and not np.isnan(avg):
+			group_table.append(tuple([avg] + list(comb)))
+	
+	# column names and data type
+	cols = [col_name for col_name in args]
+	datatype = [("GroupAVG", "<U10")] + [(col, "<U10") for col in cols]
+
+	return np.array(group_table, dtype = datatype)
+
+def join(tb1, tb2, by_condition):
+	'''
+	1. Function: join two tables by a condition
+	2. Inputs: array one; array two; the condition
+	3. Outputs: one combined table
+	4. Side Effect: no
+	'''
+
+	if tb1.tolist() == [] or tb1.tolist() == []:
+		return "Fail! One of the table is empty."
+
+	def get_index(condition, tb1, tb2):
+		condition = condition.strip("(\(|\)| )+") # e.g. (R1.qty > S.Q) -> R1.qty > S.Q
+
+		# get the comparison symbol		
+		if re.findall("!=|<=|>=", condition) == []:
+			mydelimiter = re.findall("=|<|>", condition)[0] # e.g. ">"
+		else:
+			mydelimiter = re.findall("!=|<=|>=", condition)[0]
+
+		# Is there an arithop? e.g. (R.qty + 5 = S.time * 2)
+		try:
+			arithop_left = re.findall("\+|\-|\*|\/", condition.split(mydelimiter)[0])[0] # "+"
+		except:
+			arithop_left = None
+			pass
+		try:
+			arithop_right = re.findall("\+|\-|\*|\/", condition.split(mydelimiter)[1])[0] # "*"
+		except:
+			arithop_right = None
+			pass
+
+		# How to automatically know if the column is on the left side or right side?
+		# By transform the left side to a float type, if it doesn't work, that's a column name.
+		if arithop_left: # R.qty + 5
+			tb1_col = re.split(mydelimiter, condition)[0].split(arithop_left)[0].strip(" +").split(".")[1]
+			tb1_number = re.split(mydelimiter, condition)[0].split(arithop_left)[1].strip(" +")
+		else:
+			tb1_col = re.split(mydelimiter, condition)[0].strip(" +").split(".")[1] # "qty"
+		
+		if arithop_right:
+			tb2_col = re.split(mydelimiter, condition)[1].split(arithop_right)[0].strip(" +").split(".")[1]
+			tb2_numbert = re.split(mydelimiter, condition)[1].split(arithop_right)[1].strip(" +")
+		else:
+			tb2_col = re.split(mydelimiter, condition)[1].strip(" +").split(".")[1] # "Q"
+
+
+		'''
+		try:
+			# string to int
+			mytype1 = [(name, int) if name == tb1_col else (name, tp[0]) for name, tp in tb1.dtype.fields.items()]
+			tb1 = np.array(tb1, dtype = mytype1)
+		except:
+			pass # stay string
+
+		try:
+			# string to int
+			mytype2 = [(name, int) if name == tb2_col else (name, tp[0]) for name, tp in tb2.dtype.fields.items()]
+			tb2 = np.array(tb2, dtype = mytype2)
+		except:
+			pass # stay string
+		'''
+
+		key_dict = {} #{"tb1_key": "tb2_key_list"}
+		index_dict = {} # {"tb1_index": "tb2_index_list"}
+		if mydelimiter == "=":
+			mydelimiter = "=="
+			if tb1_col+"_index" in globals() and tb2_col+"_index" in globals():
+				print("You are using a Btree or Hash format index.")
+				unique_keys_1 = eval("list("+tb1_col+"_index.keys())") # [1,2,3]
+				unique_keys_2 = eval("list("+tb2_col+"_index.keys())") # [2,3,4]
+
+				# do math -> [(original value, transformed value)]
+				if arithop_left:
+					original_transformed_key_1 = eval("[(i, float(i)" + arithop_left + tb1_number + ") for i in unique_keys_1]")
+				else:
+					original_transformed_key_1 = [(i, float(i)) for i in unique_keys_1]
+
+				if arithop_right:
+					original_transformed_key_2 = eval("[(i, float(i)" + arithop_right + tb2_number + ") for i in unique_keys_2]")
+				else:
+					original_transformed_key_2 = [(i, float(i)) for i in unique_keys_2]
+
+				# find intersection by the transformed key and then return the original key
+				for i, k in original_transformed_key_1:
+					key_dict[i] = []
+					for p, q in original_transformed_key_2:
+						if k == q:
+							key_dict[i].append(p) # #{"tb1_original_key": "tb2_original_key_list"}
+				key1 = [ele for ele, ls in key_dict.items() if ls] # don't care about empty list e.g. {"tb1_original_key": []}
+				for m in key1:
+					for n in eval(tb1_col+"_index.get(m)"):
+						index_dict[n] = []
+						for k2 in key_dict[m]: # key_dict[m] is a key 2 list
+							index_dict[n] = index_dict[n] + eval(tb2_col+"_index.get(k2)")
+
+			elif tb1_col+"_index" in globals() and not tb2_col+"_index" in globals():
+				print("You are using a Btree or Hash format index.")
+				unique_keys_1 = eval("list("+tb1_col+"_index.keys())")
+				unique_keys_2 = list(set(tb2[tb2_col]))
+
+				# do math -> [(original value, transformed value)]
+				if arithop_left:
+					original_transformed_key_1 = eval("[(i, float(i)" + arithop_left + tb1_number + ") for i in unique_keys_1]")
+				else:
+					original_transformed_key_1 = [(i, float(i)) for i in unique_keys_1]
+
+				if arithop_right:
+					original_transformed_key_2 = eval("[(i, float(i)" + arithop_right + tb2_number + ") for i in unique_keys_2]")
+				else:
+					original_transformed_key_2 = [(i, float(i)) for i in unique_keys_2]
+
+				# find intersection by the transformed key and then return the original key
+				for i, k in original_transformed_key_1:
+					key_dict[i] = []
+					for p, q in original_transformed_key_2:
+						if k == q:
+							key_dict[i].append(p) # #{"tb1_original_key": "tb2_original_key_list"}
+				key1 = [ele for ele, ls in key_dict.items() if ls] # don't care about empty list e.g. {"tb1_original_key": []}
+				for m in key1:
+					for n in eval(tb1_col+"_index.get(m)"):
+						index_dict[n] = [ind for ind, val in enumerate(tb2[tb2_col]) if val in list(key_dict[m])]
+
+			elif not tb1_col+"_index" in globals() and tb2_col+"_index" in globals():
+				print("You are using a Btree or Hash format index.")
+				unique_keys_1 = list(set(tb1[tb1_col]))
+				unique_keys_2 = eval("list("+tb2_col+"_index.keys())")
+
+				# do math -> [(original value, transformed value)]
+				if arithop_left:
+					original_transformed_key_1 = eval("[(i, float(i)" + arithop_left + tb1_number + ") for i in unique_keys_1]")
+				else:
+					original_transformed_key_1 = [(i, float(i)) for i in unique_keys_1]
+
+				if arithop_right:
+					original_transformed_key_2 = eval("[(i, float(i)" + arithop_right + tb2_number + ") for i in unique_keys_2]")
+				else:
+					original_transformed_key_2 = [(i, float(i)) for i in unique_keys_2]
+
+				# find intersection by the transformed key and then return the original key
+				for i, k in original_transformed_key_1:
+					key_dict[i] = []
+					for p, q in original_transformed_key_2:
+						if k == q:
+							key_dict[i].append(p) # #{"tb1_original_key": "tb2_original_key_list"}
+				key1 = [ele for ele, ls in key_dict.items() if ls] # don't care about empty list e.g. {"tb1_original_key": []}
+				for m in key1:
+					tb1_match_ind = [ind for ind, val in enumerate(tb1[tb1_col]) if val == m]
+					for n in tb1_match_ind:
+						index_dict[n] = []
+						for k2 in key_dict[m]: # key_dict[m] is a key 2 list
+							index_dict[n] = index_dict[n] + eval(tb2_col+"_index.get(k2)")
+
+			else:
+				unique_keys_1 = list(set(tb1[tb1_col]))
+				unique_keys_2 = list(set(tb2[tb2_col]))
+				
+				# do math -> [(original value, transformed value)]
+				if arithop_left:
+					original_transformed_key_1 = eval("[(i, float(i)" + arithop_left + tb1_number + ") for i in unique_keys_1]")
+				else:
+					original_transformed_key_1 = [(i, float(i)) for i in unique_keys_1]
+
+				if arithop_right:
+					original_transformed_key_2 = eval("[(i, float(i)" + arithop_right + tb2_number + ") for i in unique_keys_2]")
+				else:
+					original_transformed_key_2 = [(i, float(i)) for i in unique_keys_2]
+
+				# find intersection by the transformed key and then return the original key
+				for i, k in original_transformed_key_1:
+					key_dict[i] = []
+					for p, q in original_transformed_key_2:
+						if k == q:
+							key_dict[i].append(p) # #{"tb1_original_key": "tb2_original_key_list"}
+				key1 = [ele for ele, ls in key_dict.items() if ls] # don't care about empty list e.g. {"tb1_original_key": []}
+				for m in key1: 
+					tb1_match_ind = [ind for ind, val in enumerate(tb1[tb1_col]) if val == m]
+					for n in tb1_match_ind:
+						index_dict[n] = [ind for ind, val in enumerate(tb2[tb2_col]) if val in list(key_dict[m])]
+		else:
+			unique_keys_1 = list(set(tb1[tb1_col]))
+			unique_keys_2 = list(set(tb2[tb2_col]))
+			
+			# do math -> [(original value, transformed value)]
+			if arithop_left:
+				original_transformed_key_1 = eval("[(i, float(i)" + arithop_left + tb1_number + ") for i in unique_keys_1]")
+			else:
+				original_transformed_key_1 = [(i, float(i)) for i in unique_keys_1]
+
+			if arithop_right:
+				original_transformed_key_2 = eval("[(i, float(i)" + arithop_right + tb2_number + ") for i in unique_keys_2]")
+			else:
+				original_transformed_key_2 = [(i, float(i)) for i in unique_keys_2]
+
+			# find intersection by the transformed key and then return the original key
+			for i, k in original_transformed_key_1:
+				key_dict[i] = []
+				for p, q in original_transformed_key_2:
+					exec("if k"+ mydelimiter+ "q: key_dict[i].append(p)")  #{"tb1_original_key": "tb2_original_key_list"}
+			key1 = [ele for ele, ls in key_dict.items() if ls] # don't care about empty list e.g. {"tb1_original_key": []}
+			for m in key1:
+				tb1_match_ind = [ind for ind, val in enumerate(tb1[tb1_col]) if val == m]
+				for n in tb1_match_ind:
+					index_dict[n] = [ind for ind, val in enumerate(tb2[tb2_col]) if val in list(key_dict[m])]
+		
+		return index_dict
+
+
+	final_table = []
+	if " and " in by_condition or ")and " in by_condition or " and(" in by_condition or ")and(" in by_condition:
+		delim = re.findall(" and |\)and | and\(|\)and\(", by_condition)[0]
+		dict_list = []
+		conditions = by_condition.split(delim)
+
+		# get the two tables name
+		condition_for_table_name = conditions[0].strip("(\(|\)| )+")
+
+		# get the comparison symbol		
+		if re.findall("!=|<=|>=", condition_for_table_name) == []:
+			mydelimiter = re.findall("=|<|>", condition_for_table_name)[0] # e.g. ">"
+		else:
+			mydelimiter = re.findall("!=|<=|>=", condition_for_table_name)[0]
+
+		table_one_name = re.split(mydelimiter, condition_for_table_name)[0].strip(" +").split(".")[0]
+		table_two_name = re.split(mydelimiter, condition_for_table_name)[1].strip(" +").split(".")[0]
+
+		# start
+		for con in conditions:
+			dict_list.append(get_index(con, tb1, tb2))
+
+		new_dict = {}
+		for line in range(len(tb1)):
+			intersect = []
+			try:
+				for con_ind in range(len(conditions)):
+					intersect.append(dict_list[con_ind][line])
+				new_dict[line] = list(set(intersect[0]).intersection(*intersect))
+			except:
+				pass
+		for ind_1, ind_2 in new_dict.items():
+			if len(ind_2) > 0:
+				for each_ind_2 in ind_2:
+					final_table.append(tuple(list(tb1[ind_1]) + list(tb2[each_ind_2])))
+
+	elif " or " in by_condition or ")or " in by_condition or " or(" in by_condition or ")or(" in by_condition:
+		delim = re.findall(" or |\)or | or\(|\)or\(", by_condition)[0]
+		dict_list = []
+		conditions = by_condition.split(delim)
+
+		# get the two tables name
+		condition_for_table_name = conditions[0].strip("(\(|\)| )+")
+
+		# get the comparison symbol		
+		if re.findall("!=|<=|>=", condition_for_table_name) == []:
+			mydelimiter = re.findall("=|<|>", condition_for_table_name)[0] # e.g. ">"
+		else:
+			mydelimiter = re.findall("!=|<=|>=", condition_for_table_name)[0]
+
+		table_one_name = re.split(mydelimiter, condition_for_table_name)[0].strip(" +").split(".")[0]
+		table_two_name = re.split(mydelimiter, condition_for_table_name)[1].strip(" +").split(".")[0]
+
+		# start
+		for con in conditions:
+			dict_list.append(get_index(con, tb1, tb2))
+
+		new_dict = {}
+		for line in range(len(tb1)):
+			Union = []
+			try:
+				for con_ind in range(len(conditions)):
+					Union.append(dict_list[con_ind][line])
+				new_dict[line] = list(set().union(*Union))
+			except:
+				pass
+		for ind_1, ind_2 in new_dict.items():
+			if len(ind_2) > 0:
+				for each_ind_2 in ind_2:
+					final_table.append(tuple(list(tb1[ind_1]) + list(tb2[each_ind_2])))
+
+	else:
+		# get the two tables name
+		condition_for_table_name = by_condition.strip("(\(|\)| )+")
+
+		# get the comparison symbol		
+		if re.findall("!=|<=|>=", condition_for_table_name) == []:
+			mydelimiter = re.findall("=|<|>", condition_for_table_name)[0] # e.g. ">"
+		else:
+			mydelimiter = re.findall("!=|<=|>=", condition_for_table_name)[0]
+
+		table_one_name = re.split(mydelimiter, condition_for_table_name)[0].strip(" +").split(".")[0]
+		table_two_name = re.split(mydelimiter, condition_for_table_name)[1].strip(" +").split(".")[0]
+
+		# start
+		index_table = get_index(by_condition, tb1, tb2)
+		for ind_1, ind_2 in index_table.items():
+			if len(ind_2) > 0:
+				for each_ind_2 in ind_2:
+					final_table.append(tuple(list(tb1[ind_1]) + list(tb2[each_ind_2])))
+
+	# give column name and data type to the array
+	table_one_col_name = [table_one_name + "_" + i for i in tb1.dtype.names]
+	table_two_col_name = [table_two_name + "_" + i for i in tb2.dtype.names]
+	full_table_col_name = table_one_col_name + table_two_col_name
+
+	#formats = ["<U10"] * len(full_table_col_name)
+	#datatype = np.dtype({'names': full_table_col_name, 'formats': formats})
+	datatype = [(col_name, "<U10") for col_name in full_table_col_name]
+	return np.array(final_table, dtype = datatype)
+
+	
+
+def sort(table, *args):
+	'''
+	1. Function: sort the array by a column
+	2. Inputs: array; column name (can be multiple columns)
+	3. Outputs: a sorted array
+	4. Side Effect: no
+	'''
+
+	if table.tolist() == []:
+		return "Fail! The table is empty."
+
+	# create a new table 
+	new_table = table.copy()
+	table_type = table.dtype
+
+	# string to float and add the index type
+	table_type_add_index = []
+	for name, tp in table.dtype.fields.items():
+		try:
+			success = np.array(table[name], dtype = "float")
+			if name in args:
+				table_type_add_index.append((name, "float"))
+			else:
+				table_type_add_index.append((name, tp[0]))
+		except: # cannot be converted to float
+			table_type_add_index.append((name, tp[0]))
+
+	table_type_add_index.append(("idex_column", int))
+
+	# the column to sort
+	sort_cols = [col_name for col_name in args]
+	
+	# add an index at the end
+	index_column = [[i] for i in range(len(table))]
+	table = np.insert([list(line) for line in table], [len(table.dtype)], index_column, axis = 1)
+
+	# find the index after sorted
+	table = [tuple(line) for line in table]
+	sorted_index = np.sort(np.array(table, dtype = table_type_add_index), order = sort_cols)["idex_column"]
+
+	# change the order of new_table based on sorted_index
+	return np.array([new_table[i] for i in sorted_index], dtype = table_type)
+
+
+def movavg(table, col_name, n_item):
+	'''
+	1. Function: compute the n-item moving average of the array by a selected column
+	2. Inputs: array; the selected column you want to compute; n item
+	3. Outputs: a new array
+	4. Side Effect: no
+	'''
+	table_type = table.dtype
+	if table.tolist() == []:
+		return "Fail! The table is empty."
+
+	if len(table) < n_item:
+		print("The number of rows is " + str(len(table)) + ". Please choose a smaller value of n_item.")
+	else:
+		pass
+
+	try:
+		# string to float
+		mytype = [(name, float) if name == col_name else (name, tp[0]) for name, tp in table.dtype.fields.items()]
+		table = np.array(table, dtype = mytype)
+	except:
+		print("The selected columns could not be conveted to integers.")
+
+	target_col = table[col_name]
+	movavg_result = []
+	# first n_item-1 
+	for i in range(1, n_item):
+		movavg_result.append(np.mean(target_col[:i]))
+
+	# n_item moving window
+	start = 0
+	while start + n_item <= len(target_col):
+		movavg_result.append(np.mean(target_col[start:(n_item+start)]))
+		start += 1
+
+	result = [tuple(list(line) + [movavg_result[ind]]) for ind, line  in enumerate(table)]
+	# data type
+	datatype = [(name, tp[0]) for name, tp in table_type.fields.items()] + [("GroupAVG", "<U10")]
+
+	return np.array(result, dtype = datatype)
+
+def movsum(table, col_name, n_item):
+	'''
+	1. Function:compute the n-item moving sum of the array by a selected column
+	2. Inputs: array; the selected column you want to compute; n item
+	3. Outputs: a new array
+	4. Side Effect: no
+	'''
+	table_type = table.dtype
+	if table.tolist() == []:
+		return "Fail! The table is empty."
+
+	if len(table) < n_item:
+		print("The number of rows is " + str(len(table)) + ". Please choose a smaller value of n_item.")
+	else:
+		pass
+
+	try:
+		# string to float
+		mytype = [(name, float) if name == col_name else (name, tp[0]) for name, tp in table.dtype.fields.items()]
+		table = np.array(table, dtype = mytype)
+	except:
+		print("The selected columns could not be conveted to integers.")
+
+	target_col = table[col_name]
+	movsum_result = []
+	# first n_item-1 
+	for i in range(1, n_item):
+		movsum_result.append(np.sum(target_col[:i]))
+
+	# n_item moving window
+	start = 0
+	while start + n_item <= len(target_col):
+		movsum_result.append(np.sum(target_col[start:(n_item+start)]))
+		start += 1
+
+	result = [tuple(list(line) + [movsum_result[ind]]) for ind, line  in enumerate(table)]
+	# data type
+	datatype = [(name, tp[0]) for name, tp in table_type.fields.items()] + [("GroupSum", "<U10")]
+
+	return np.array(result, dtype = datatype)
+
+def concat(tb1, tb2):
+	'''
+	1. Function: concatenate two array with the same schema
+	2. Inputs: array1; array2
+	3. Outputs: a concatenated array
+	4. Side Effect: no
+	'''
+
+	if tb1.tolist() == [] or tb2.tolist() == []:
+		return "Fail! One of the table is empty."
+
+	return np.append(tb1, tb2)
+
+def outputtofile(table, outputfile):
+	'''
+	1. Function: save the array into a txt file
+	2. Inputs: array; output file path
+	3. Outputs: None; a saving file
+	4. Side Effect: no
+	'''
+
+	if table.tolist() == []:
+		print("Fail! The table is empty.")
+
+	try:
+		outputtable = [list(table.dtype.names)] + [list(line) for line in table]
+		np.savetxt(outputfile, outputtable, fmt='%s', delimiter = "|")
+	except:
+		print("Fail!")
+
+def Btree(table, index_col):
+	'''
+	1. Function: give index to the array by btree
+	2. Inputs: array; the index column
+	3. Outputs: return None; a global variable for index
+	4. Side Effect: a global variable
+	'''
+
+	if table.tolist() == []:
+		return "Fail! The table is empty."
+
+	globals()[index_col+"_index"] = BTree() # mydata_pricerange_btree = BTree() 
+	
+
+	col_list = table[index_col]
+
+	group = list(set(col_list))
+	for gp in group:
+		value_list = [i for i, v in enumerate(col_list) if v == gp]
+		eval(index_col+"_index" + ".insert(gp, value_list)")
+
+
+def Hash(table, index_col):
+	'''
+	1. Function: give index to the array by hashing
+	2. Inputs: array; the index column
+	3. Outputs: return None; a global variable for index
+	4. Side Effect: a global variable
+	'''
+
+	if table.tolist() == []:
+		return "Fail! The table is empty."
+
+	globals()[index_col+"_index"] = {}
+	
+
+	col_list = table[index_col]
+
+	group = list(set(col_list))
+	for gp in group:
+		value_list = [i for i, v in enumerate(col_list) if v == gp]
+		exec(index_col+"_index[gp] = value_list")
+
+
+command_file_path = sys.argv[-1]
+if __name__ == "__main__":
+
+	commands = []
+
+	#open two text files to save the result and time:
+	timefile = open("processing_time.txt", "w")
+	
+	resultfile = open("alloperations.txt", "w")
+
+	# Read the command file
+	
+	with open(command_file_path, "r") as file:
+		for line in file:
+			commands.append(line.strip("\n"))
+
+	# Start the command function
+	for func in commands:
+		start = time.time()
+		try:
+			func_name = func.split(":=")[1].split("(")[0].strip(" ") # e.g. inputfromfile
+		except:
+			func_name = func.split("(")[0].strip(" ")
+			
+		# determine which function to use
+		if func_name == "inputfromfile":
+			path = func.split("(")[1].strip("( |\))").strip(" ") # e.g. "test.txt" 
+			assigned_name = func.split(":=")[0].strip(" ") # e.g. R
+			exec(assigned_name+"="+func_name+"('"+path+"')") # e.g. R = inputfromfile('test.txt') -> exec("R = inputfromfile('test.txt')")
+
+		if func_name == "select":
+			table = func.split("(")[1].strip("( |\))").split(",")[0].strip(" ")  # ex. "R"
+			arg = func.split(",")[1].strip(" ")[:-1]  # ex. (time > 50) or (qty < 30))
+			assigned_name = func.split(":=")[0].strip(" ") # ex. R1
+			exec(assigned_name+"="+func_name+"("+table+","+  "'"+ arg+"'" + ")") # e.g. R1 := select(R, (time > 50) or (qty < 30)) -> exec("R1 = select(R, 'time >50 or qty <30')")
+			
+		if func_name == "project":
+			table = func.split("(")[1].strip("( |\))").split(",")[0].strip(" ")  # ex. "R1"
+			col = func.split("(")[1].strip("( |\))").split(",")[1:]
+			col = [i.strip(" +") for i in col]  # ' saleid', ' qty', ' pricerange'
+			assigned_name = func.split(":=")[0].strip(" ") # ex. R2
+			exec(assigned_name+"="+func_name+"("+table+","+  str(col).strip("[]") + ")") 
+			
+		if func_name == "avg":
+			table = func.split("(")[1].strip("( |\))").split(",")[0].strip(" ") # ex. "R1"
+			col =  func.split("(")[1].strip("( |\))").split(",")[1].strip(" ")  # qty
+			assigned_name = func.split(":=")[0].strip(" ")  # R3
+			exec(assigned_name+"="+func_name+"("+table+","+"'"+ col +"'"+ ")") 
+		
+		#R4 := sumgroup(R1, time, qty)   
+		if func_name == "sumgroup":
+			table = func.split("(")[1].strip("( |\))").split(",")[0].strip(" ") # ex. "R1"
+			col =  func.split("(")[1].strip("( |\))").split(",")[1:]  # qty
+			col = [i.strip(" +") for i in col]
+			assigned_name = func.split(":=")[0].strip(" ")  # R3
+			exec(assigned_name+"="+func_name+"("+table+","+  str(col).strip("[]") + ")") 
+		#R6 := avggroup(R1, qty, pricerange)
+		if func_name == "avggroup":
+			table = func.split("(")[1].strip("( |\))").split(",")[0].strip(" ") # ex. "R1"
+			col =  func.split("(")[1].strip("( |\))").split(",")[1:]  # qty, pricerange
+			col = [i.strip(" +") for i in col]
+			assigned_name = func.split(":=")[0].strip(" ")  # R6
+			exec(assigned_name+"="+func_name+"("+table+","+  str(col).strip("[]") + ")") 
+		# T := join(R, S, R.customerid = S.C)
+		if func_name == "join":
+			table = func.split("(")[1].strip("( |\))").split(",")[0:2]# ex. "R, S"
+			table = [i.strip(" +") for i in table]
+			col =  func.split(",")[2][:-1].strip(" ") # R.customerid = S.C
+			assigned_name = func.split(":=")[0].strip(" ")  # R3
+			exec(assigned_name+"="+func_name+"("+str(table).strip("[]").replace("'", "")+", '"+ col + "')") 
+		#T1 := join(R1, S, (R1.qty > S.Q) and (R1.saleid = S.saleid))
+
+
+
+		# 'T2 := sort(T1, S_C)'
+		if func_name == "sort":
+			table = func.split("(")[1].strip("( |\))").split(",")[0].strip(" ")# ex. "T1"
+			col =  func.split("(")[1].strip("( |\))").split(",")[1:]  # S_C
+			col = [i.strip(" ") for i in col]
+			assigned_name = func.split(":=")[0].strip(" ")  # T2
+			exec(assigned_name+"="+func_name+"("+table+","+  str(col).strip("[]") + ")")
+
+		#T3 := movavg(T2prime, R1_qty, 3)
+		if func_name =='movavg':
+			table = func.split("(")[1].strip("( |\))").split(",")[0].strip(" ")
+			col =  func.split("(")[1].strip("( |\))").split(",")[1].strip(" ")
+			nitem = func.split("(")[1].strip("( |\))").split(",")[2].strip(" ")
+			assigned_name = func.split(":=")[0].strip(" ")
+			exec(assigned_name+"="+func_name+"("+table+", "+ "'" + col + "', " + nitem + ")")
+
+		if func_name =='movsum':
+			table = func.split("(")[1].strip("( |\))").split(",")[0].strip(" ")
+			col =  func.split("(")[1].strip("( |\))").split(",")[1].strip(" ")
+			nitem = func.split("(")[1].strip("( |\))").split(",")[2].strip(" ")
+			assigned_name = func.split(":=")[0].strip(" ")
+			exec(assigned_name+"="+func_name+"("+table+", "+ "'" + col + "', " + nitem + ")")
+
+		#Btree(R, qty)
+		if func_name == "Btree":
+			table = func.split("(")[1].strip("( |\))").split(",")[0].strip(" ") # ex. "R1"
+			col =  func.split("(")[1].strip("( |\))").split(",")[1].strip(" ")  # qty
+			exec(func_name+"("+table+","+"'"+ col +"'"+ ")") 
+
+		#Q5 := concat(Q4, Q2). concat 要改一下程式，讓他可以讀 concat(R, R1) 
+		if func_name == "concat":
+			table = func.split("(")[1].strip("( |\))").strip(" ")# ex. "Q4, Q2"
+			assigned_name = func.split(":=")[0].strip(" ") 
+			exec(assigned_name+"="+func_name+"("+table +")")
+
+		# outputfromfile(Q5, Q5)
+		if func_name == "outputtofile":
+			table = func.split("(")[1].strip("( |\))").split(",")[0].strip(" ") # ex. "Q5"
+			col =  func.split("(")[1].strip("( |\))").split(",")[1].strip(" ")  # Q5
+			exec(func_name+"("+table+","+"'"+ col +"'"+ ")")
+
+		end = time.time()
+		processingTime = 'Processing time for "%s" is: %s sec.' % (func, str(round(end - start, 3)))
+		print(processingTime)
+
+		# save
+		timefile.write(processingTime + "\n\n")
+
+
+		try:
+			outdata = eval(assigned_name)
+			result = '|'.join(outdata.dtype.names) + '\n' + ''.join(['|'.join(i) + '\n' for i in outdata])
+		except:
+			pass
+		resultfile.write("The result of '%s' is:\n" % func + result + "\n\n\n")
+	timefile.close()
+	resultfile.close()
+
